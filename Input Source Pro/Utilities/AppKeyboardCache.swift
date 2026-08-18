@@ -4,23 +4,43 @@ import os
 
 @MainActor
 class AppKeyboardCache {
-    private var cache = [String: String]()
+    private static let storageKey = "ISPAppKeyboardCache.v1"
+
+    private var cache: [String: String]
+    private let defaults: UserDefaults
 
     let logger = ISPLogger(category: String(describing: AppKeyboardCache.self))
 
-    func remove(_ kind: AppKind) {
-        if let id = kind.getId(), cache[id] != nil {
-            logger.debug { "Remove #\(id)" }
-            cache[id] = nil
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let stored = defaults.dictionary(forKey: Self.storageKey) as? [String: String] {
+            cache = stored
+        } else {
+            cache = [:]
         }
+        logger.debug { "Loaded \(self.cache.count) keyboard memory entries" }
+    }
+
+    var entryCount: Int { cache.count }
+
+    func remove(_ kind: AppKind) {
+        guard let id = kind.getId(), cache[id] != nil else { return }
+        logger.debug { "Remove #\(id)" }
+        cache.removeValue(forKey: id)
+        persist()
     }
 
     func save(_ kind: AppKind, keyboard: InputSource?) {
         guard let id = kind.getId() else { return }
 
         if let keyboardId = keyboard?.persistentIdentifier {
+            guard cache[id] != keyboardId else { return }
             logger.debug { "Save \(id)#\(keyboardId)" }
             cache[id] = keyboardId
+            persist()
+        } else if cache[id] != nil {
+            cache.removeValue(forKey: id)
+            persist()
         }
     }
 
@@ -35,17 +55,24 @@ class AppKeyboardCache {
     }
 
     func clear() {
-        // FIXME: - Some apps/websites where 'restore' is selected should be ignored
         logger.debug { "Clear All" }
         cache.removeAll()
+        persist()
     }
 
     func remove(byBundleId bundleId: String) {
-        for key in cache.keys {
-            if key.starts(with: "\(bundleId)_") {
-                logger.debug { "Remove \(bundleId)#\(key)" }
-                cache[key] = nil
-            }
+        let prefix = "\(bundleId)_"
+        let keys = cache.keys.filter { $0 == bundleId || $0.hasPrefix(prefix) }
+        guard !keys.isEmpty else { return }
+
+        for key in keys {
+            logger.debug { "Remove \(bundleId)#\(key)" }
+            cache.removeValue(forKey: key)
         }
+        persist()
+    }
+
+    private func persist() {
+        defaults.set(cache, forKey: Self.storageKey)
     }
 }

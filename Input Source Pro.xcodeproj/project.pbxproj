@@ -153,6 +153,9 @@
 		D58168D528957D5500E84058 /* QuestionMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = D58168D428957D5500E84058 /* QuestionMark.swift */; };
 		D58C184428A6ABBC00F52845 /* NSRunningApplication+FocusedElement.swift in Sources */ = {isa = PBXBuildFile; fileRef = D58C184328A6ABBC00F52845 /* NSRunningApplication+FocusedElement.swift */; };
 		D58C184628A6B2DE00F52845 /* ISPLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = D58C184528A6B2DE00F52845 /* ISPLogger.swift */; };
+		D6A100112F2000000000A001 /* ISPFileLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6A100012F2000000000A001 /* ISPFileLog.swift */; };
+		D6A100122F2000000000A002 /* LaunchpadOverlayDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6A100022F2000000000A002 /* LaunchpadOverlayDetector.swift */; };
+		D6A100132F2000000000A003 /* SystemChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6A100032F2000000000A003 /* SystemChrome.swift */; };
 		D58C184828A808F000F52845 /* KeyboardRestoreStrategy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D58C184728A808F000F52845 /* KeyboardRestoreStrategy.swift */; };
 		D5CC44942A33F143007FF839 /* TroubleshootingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5CC44932A33F143007FF839 /* TroubleshootingSettingsView.swift */; };
 		D5CC44962A33F485007FF839 /* EnhancedModeRequiredBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5CC44952A33F485007FF839 /* EnhancedModeRequiredBadge.swift */; };
@@ -344,6 +347,9 @@
 		D58168D428957D5500E84058 /* QuestionMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionMark.swift; sourceTree = "<group>"; };
 		D58C184328A6ABBC00F52845 /* NSRunningApplication+FocusedElement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NSRunningApplication+FocusedElement.swift"; sourceTree = "<group>"; };
 		D58C184528A6B2DE00F52845 /* ISPLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISPLogger.swift; sourceTree = "<group>"; };
+		D6A100012F2000000000A001 /* ISPFileLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISPFileLog.swift; sourceTree = "<group>"; };
+		D6A100022F2000000000A002 /* LaunchpadOverlayDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchpadOverlayDetector.swift; sourceTree = "<group>"; };
+		D6A100032F2000000000A003 /* SystemChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemChrome.swift; sourceTree = "<group>"; };
 		D58C184728A808F000F52845 /* KeyboardRestoreStrategy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardRestoreStrategy.swift; sourceTree = "<group>"; };
 		D5CC44932A33F143007FF839 /* TroubleshootingSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TroubleshootingSettingsView.swift; sourceTree = "<group>"; };
 		D5CC44952A33F485007FF839 /* EnhancedModeRequiredBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnhancedModeRequiredBadge.swift; sourceTree = "<group>"; };
@@ -692,6 +698,8 @@
 				D579258F2A1AB1DA003B83EA /* NSRunningApplication+FloatingApp.swift */,
 				D579258B2A1AB0A4003B83EA /* NSRunningApplication+WindowInfo.swift */,
 				D58C184328A6ABBC00F52845 /* NSRunningApplication+FocusedElement.swift */,
+				D6A100022F2000000000A002 /* LaunchpadOverlayDetector.swift */,
+				D6A100032F2000000000A003 /* SystemChrome.swift */,
 				4ADDC325281AC4DD0075528A /* NSApplication.swift */,
 				4A742D0928229A5400DCB392 /* NSWorkspace.swift */,
 				4AC450B1281BE00A00DA0329 /* CGRect.swift */,
@@ -735,6 +743,7 @@
 			isa = PBXGroup;
 			children = (
 				D58C184528A6B2DE00F52845 /* ISPLogger.swift */,
+				D6A100012F2000000000A001 /* ISPFileLog.swift */,
 			);
 			path = Log;
 			sourceTree = "<group>";
@@ -1053,6 +1062,9 @@
 				D5F4A1CA2F0B1234001B2C3D /* InputSourceSwitcher.swift in Sources */,
 				D5115A1E2A33D57A00D94E51 /* ItemSection.swift in Sources */,
 				D58C184628A6B2DE00F52845 /* ISPLogger.swift in Sources */,
+				D6A100112F2000000000A001 /* ISPFileLog.swift in Sources */,
+				D6A100122F2000000000A002 /* LaunchpadOverlayDetector.swift in Sources */,
+				D6A100132F2000000000A003 /* SystemChrome.swift in Sources */,
 				4A8E47692F08814500424D11 /* SwiftUI+FlexibleButtonSizing.swift in Sources */,
 				4ADDC326281AC4DD0075528A /* NSApplication.swift in Sources */,
 				4AC2615328786EAB0032AAFE /* NSCFRange.swift in Sources */,

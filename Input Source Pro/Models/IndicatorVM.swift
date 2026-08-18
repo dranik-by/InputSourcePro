@@ -33,6 +33,13 @@ final class IndicatorVM: ObservableObject {
 
     var refreshShortcutSubject = PassthroughSubject<Void, Never>()
 
+    private var stableUserLayoutCacheWork: DispatchWorkItem?
+    private let stableUserLayoutCacheDelay: TimeInterval = 1.5
+
+    private var lastAppliedLayoutIdByBundle: [String: String] = [:]
+    private var lastAppliedAtByBundle: [String: Date] = [:]
+    private let leaveStealGuardWindow: TimeInterval = 1.25
+
     private(set) lazy var activateEventPublisher = Publishers.MergeMany([
         longMouseDownPublisher(),
         stateChangesPublisher(),
@@ -87,21 +94,14 @@ final class IndicatorVM: ObservableObject {
     }
 
     private func clearAppKeyboardCacheIfNeed() {
-        applicationVM.$appsDiff
-            .sink { [weak self] appsDiff in
-                appsDiff.removed
-                    .compactMap { $0.bundleIdentifier }
-                    .forEach { bundleId in
-                        self?.preferencesVM.removeKeyboardCacheFor(bundleId: bundleId)
-                    }
-            }
-            .store(in: cancelBag)
-
         preferencesVM.$preferences
             .map(\.isRestorePreviouslyUsedInputSource)
+            .removeDuplicates()
+            .dropFirst()
             .filter { $0 == false }
             .sink { [weak self] _ in
                 self?.preferencesVM.clearKeyboardCache()
+                ISPFileLog.event("cache-clear", "restore-previously-used turned off", includeSnapshot: false)
             }
             .store(in: cancelBag)
     }
@@ -223,9 +223,13 @@ extension IndicatorVM {
                 else { return state }
 
                 @MainActor
-                func updateState(appKind: AppKind?, inputSource: InputSource, inputSourceChangeReason: InputSourceChangeReason) -> State {
-                    // TODO: Move to outside
-                    if let appKind = appKind {
+                func updateState(
+                    appKind: AppKind?,
+                    inputSource: InputSource,
+                    inputSourceChangeReason: InputSourceChangeReason,
+                    shouldCache: Bool
+                ) -> State {
+                    if shouldCache, let appKind = appKind {
                         preferencesVM.cacheKeyboardFor(appKind, keyboard: inputSource)
                     }
 
@@ -241,6 +245,32 @@ extension IndicatorVM {
                 case .start:
                     return state
                 case let .appChanged(appKind):
+                    self?.stableUserLayoutCacheWork?.cancel()
+
+                    if let previous = state.appKind,
+                       let prevId = previous.getApp().bundleIdentifier,
+                       prevId != appKind.getApp().bundleIdentifier,
+                       !SystemChrome.isLaunchpadRelated(prevId)
+                    {
+                        let leavingLayout = self?.layoutForLeave(previous) ?? InputSource.getCurrentInputSource()
+                        preferencesVM.rememberKeyboardOnLeave(for: previous, keyboard: leavingLayout)
+                    }
+
+                    if let restored = self?.applicationVM.consumeLaunchpadLayoutRestore(for: appKind) {
+                        ISPFileLog.event(
+                            "switch",
+                            "app=\(appKind.getApp().bundleIdentifier ?? "?") via=launchpad-restore → \(restored.persistentIdentifier)"
+                        )
+                        inputSourceVM.select(inputSource: restored, app: appKind.getApp())
+                        self?.noteAppliedLayout(appKind, restored)
+                        return updateState(
+                            appKind: appKind,
+                            inputSource: restored,
+                            inputSourceChangeReason: .appSpecified(.cached(restored)),
+                            shouldCache: false
+                        )
+                    }
+
                     if let status = preferencesVM.getAppAutoSwitchKeyboard(appKind) {
                         // The target keyboard is already active in macOS: skip the
                         // redundant TIS select (and CJKV fix) so nothing "switches",
@@ -253,32 +283,90 @@ extension IndicatorVM {
                             return updateState(
                                 appKind: appKind,
                                 inputSource: liveInputSource,
-                                inputSourceChangeReason: .noChanges
+                                inputSourceChangeReason: .noChanges,
+                                shouldCache: false
                             )
                         }
 
+                        let via: String = {
+                            switch status {
+                            case .cached: return "cached"
+                            case .specified: return "specified"
+                            }
+                        }()
+                        let disk = preferencesVM.appKeyboardCache.retrieve(appKind)?.persistentIdentifier ?? "nil"
+                        let current = InputSource.getCurrentInputSource().persistentIdentifier
+                        ISPFileLog.event(
+                            "switch",
+                            "app=\(appKind.getApp().bundleIdentifier ?? "?") via=\(via) → \(status.inputSource.persistentIdentifier) | current=\(current) disk=\(disk)"
+                        )
                         inputSourceVM.select(inputSource: status.inputSource, app: appKind.getApp())
+                        self?.noteAppliedLayout(appKind, status.inputSource)
 
                         return updateState(
                             appKind: appKind,
                             inputSource: status.inputSource,
-                            inputSourceChangeReason: .appSpecified(status)
+                            inputSourceChangeReason: .appSpecified(status),
+                            shouldCache: false
                         )
                     } else {
+                        ISPFileLog.event(
+                            "switch-skip",
+                            "app=\(appKind.getApp().bundleIdentifier ?? "?") no rule/cache"
+                        )
                         return updateState(
                             appKind: appKind,
                             inputSource: state.inputSource,
-                            inputSourceChangeReason: .noChanges
+                            inputSourceChangeReason: .noChanges,
+                            shouldCache: false
                         )
                     }
                 case let .inputSourceChanged(inputSource):
                     guard inputSource.persistentIdentifier != state.inputSource.persistentIdentifier else { return state }
 
-                    return updateState(appKind: state.appKind, inputSource: inputSource, inputSourceChangeReason: .system)
+                    ISPFileLog.event(
+                        "tis-system",
+                        "\(state.inputSource.persistentIdentifier) → \(inputSource.persistentIdentifier) app=\(state.appKind?.getApp().bundleIdentifier ?? "nil")"
+                    )
+
+                    if let appKind = state.appKind,
+                       let forced = preferencesVM.forcedKeyboard(for: appKind),
+                       forced.persistentIdentifier != inputSource.persistentIdentifier
+                    {
+                        ISPFileLog.event(
+                            "forced-repin",
+                            "\(appKind.getApp().bundleIdentifier ?? "?") \(inputSource.persistentIdentifier) → \(forced.persistentIdentifier)"
+                        )
+                        inputSourceVM.select(inputSource: forced, app: appKind.getApp())
+                        self?.noteAppliedLayout(appKind, forced)
+                        return updateState(
+                            appKind: appKind,
+                            inputSource: forced,
+                            inputSourceChangeReason: .appSpecified(.specified(forced)),
+                            shouldCache: false
+                        )
+                    }
+
+                    let newState = updateState(
+                        appKind: state.appKind,
+                        inputSource: inputSource,
+                        inputSourceChangeReason: .system,
+                        shouldCache: false
+                    )
+                    self?.scheduleStableUserLayoutCache(appKind: state.appKind, inputSource: inputSource)
+                    return newState
                 case let .switchInputSourceByShortcut(inputSource):
                     inputSourceVM.select(inputSource: inputSource, app: state.appKind?.getApp())
+                    if let appKind = state.appKind {
+                        self?.noteAppliedLayout(appKind, inputSource)
+                    }
 
-                    return updateState(appKind: state.appKind, inputSource: inputSource, inputSourceChangeReason: .shortcut)
+                    return updateState(
+                        appKind: state.appKind,
+                        inputSource: inputSource,
+                        inputSourceChangeReason: .shortcut,
+                        shouldCache: true
+                    )
                 }
             }
             .removeDuplicates(by: { $0.isSame(with: $1) })
@@ -303,6 +391,78 @@ extension IndicatorVM {
 
         refreshShortcut()
         send(.start)
+    }
+
+    private func noteAppliedLayout(_ appKind: AppKind, _ inputSource: InputSource) {
+        guard let bundleId = appKind.getApp().bundleIdentifier else { return }
+        lastAppliedLayoutIdByBundle[bundleId] = inputSource.persistentIdentifier
+        lastAppliedAtByBundle[bundleId] = Date()
+    }
+
+    private func layoutForLeave(_ appKind: AppKind) -> InputSource {
+        let current = InputSource.getCurrentInputSource()
+        let bundleId = appKind.getApp().bundleIdentifier ?? "?"
+        let disk = preferencesVM.appKeyboardCache.retrieve(appKind)?.persistentIdentifier ?? "nil"
+
+        guard let bundleKey = appKind.getApp().bundleIdentifier,
+              let appliedId = lastAppliedLayoutIdByBundle[bundleKey],
+              let appliedAt = lastAppliedAtByBundle[bundleKey],
+              let applied = InputSource.resolvePersistedIdentifier(appliedId)
+        else {
+            ISPFileLog.event(
+                "leave-pick",
+                "\(bundleId) use=current \(current.persistentIdentifier) disk=\(disk)",
+                includeSnapshot: false
+            )
+            return current
+        }
+
+        let sinceApply = Date().timeIntervalSince(appliedAt)
+        if sinceApply <= leaveStealGuardWindow,
+           current.persistentIdentifier != applied.persistentIdentifier
+        {
+            ISPFileLog.event(
+                "leave-pick",
+                "\(bundleId) use=applied \(applied.persistentIdentifier) (guard \(String(format: "%.2f", sinceApply))s) current=\(current.persistentIdentifier) disk=\(disk)",
+                includeSnapshot: false
+            )
+            return applied
+        }
+
+        ISPFileLog.event(
+            "leave-pick",
+            "\(bundleId) use=current \(current.persistentIdentifier) applied=\(applied.persistentIdentifier) sinceApply=\(String(format: "%.2f", sinceApply)) disk=\(disk)",
+            includeSnapshot: false
+        )
+        return current
+    }
+
+    private func scheduleStableUserLayoutCache(appKind: AppKind?, inputSource: InputSource) {
+        stableUserLayoutCacheWork?.cancel()
+
+        guard let appKind,
+              !SystemChrome.shouldNeverCache(appKind.getApp().bundleIdentifier),
+              preferencesVM.appNeedCacheKeyboard(appKind)
+        else { return }
+
+        let tokenBundle = appKind.getApp().bundleIdentifier
+        let tokenLayout = inputSource.persistentIdentifier
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.state.appKind?.getApp().bundleIdentifier == tokenBundle,
+                  self.state.inputSource.persistentIdentifier == tokenLayout,
+                  !LaunchpadOverlayDetector.isLaunchpadVisible()
+            else { return }
+
+            self.preferencesVM.cacheKeyboardFor(appKind, keyboard: inputSource)
+            ISPFileLog.event(
+                "cache-stable",
+                "\(tokenBundle ?? "?") → \(tokenLayout)",
+                includeSnapshot: false
+            )
+        }
+        stableUserLayoutCacheWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + stableUserLayoutCacheDelay, execute: work)
     }
 
     private func shortcutBindings() -> [ShortcutBinding] {

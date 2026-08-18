@@ -77,6 +77,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         
         LaunchAtLogin.migrateIfNeeded()
+        ISPFileLog.startSession()
+        preferencesVM.logStartupSettings()
         openPreferencesAtFirstLaunch()
         sendLaunchPing()
         updateInstallVersionInfo()

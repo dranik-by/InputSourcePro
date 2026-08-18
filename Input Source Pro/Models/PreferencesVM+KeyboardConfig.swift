@@ -149,6 +149,14 @@ extension PreferencesVM {
                 $0.indicatorInfo = $0.isShowInputSourcesLabel ? .iconAndTitle : .iconOnly
             }
         }
+
+        let restoreMigrateKey = "ISPEnableRestorePreviouslyUsed.v1"
+        if !UserDefaults.standard.bool(forKey: restoreMigrateKey) {
+            UserDefaults.standard.set(true, forKey: restoreMigrateKey)
+            if !preferences.isRestorePreviouslyUsedInputSource {
+                update { $0.isRestorePreviouslyUsedInputSource = true }
+            }
+        }
     }
 
     func migrateBoutiqueIfNeed() {
