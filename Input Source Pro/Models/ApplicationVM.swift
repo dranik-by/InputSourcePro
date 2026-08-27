@@ -2,6 +2,7 @@ import AppKit
 import AXSwift
 import Combine
 import CombineExt
+import ApplicationServices
 import os
 
 @MainActor
@@ -68,32 +69,61 @@ extension ApplicationVM {
                 guard let preferencesVM = self?.preferencesVM
                 else { return Empty().eraseToAnyPublisher() }
 
-                guard NSApplication.isBrowser(app)
-                else { return Just(.from(app, preferencesVM: preferencesVM)).eraseToAnyPublisher() }
+                if NSApplication.isBrowser(app) {
+                    return Timer
+                        .interval(seconds: 1)
+                        .prepend(Date())
+                        .compactMap { _ in app.focusedUIElement(preferencesVM: preferencesVM) }
+                        .first()
+                        .flatMapLatest { _ in
+                            app.watchAX([
+                                .focusedUIElementChanged,
+                                .titleChanged,
+                                .windowCreated,
+                            ], [.application, .window])
+                                .filter { $0.notification != .windowCreated }
+                                .map { event in event.runningApp }
+                        }
+                        .prepend(app)
+                        .compactMap { app -> AppKind? in .from(app, preferencesVM: preferencesVM) }
+                        .eraseToAnyPublisher()
+                }
 
-                return Timer
-                    .interval(seconds: 1)
-                    .prepend(Date())
-                    .compactMap { _ in app.focusedUIElement(preferencesVM: preferencesVM) }
-                    .first()
-                    .flatMapLatest { _ in
-                        app.watchAX([
-                            .focusedUIElementChanged,
-                            .titleChanged,
-                            .windowCreated,
-                        ], [.application, .window])
-                            .filter { $0.notification != .windowCreated }
-                            .map { event in event.runningApp }
-                    }
+                let pid = app.processIdentifier
+                let poll = Timer
+                    .interval(seconds: 0.25)
+                    .map { _ in app }
                     .prepend(app)
+
+                let ax: AnyPublisher<NSRunningApplication, Never> = {
+                    guard AXIsProcessTrusted() else {
+                        return Empty().eraseToAnyPublisher()
+                    }
+                    return app.watchAX(
+                        [
+                            .focusedWindowChanged,
+                            .focusedUIElementChanged,
+                            .windowCreated,
+                        ],
+                        [.application, .window]
+                    )
+                    .filter { $0.notification != .windowCreated }
+                    .map { event in event.runningApp }
+                    .eraseToAnyPublisher()
+                }()
+
+                return Publishers.Merge(poll, ax)
+                    .filter { $0.processIdentifier == pid }
                     .compactMap { app -> AppKind? in .from(app, preferencesVM: preferencesVM) }
                     .eraseToAnyPublisher()
             }
             .removeDuplicates(by: { $0.isSameAppOrWebsite(with: $1, detectAddressBar: true) })
             .sink { [weak self] in
+                let app = $0.getApp()
+                let window = $0.windowCacheId() ?? "nil"
                 ISPFileLog.event(
                     "focus",
-                    "appKind=\($0.getApp().bundleIdentifier ?? "nil") \($0.getApp().localizedName ?? "")"
+                    "app=\(app.bundleIdentifier ?? "nil")#\(app.processIdentifier) name=\(app.localizedName ?? "?") cacheId=\($0.getId() ?? "nil") window=\(window)"
                 )
                 self?.appKind = $0
             }

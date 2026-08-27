@@ -1,6 +1,4 @@
 import Cocoa
-import Combine
-import SwiftUI
 import Alamofire
 import LaunchAtLogin
 
@@ -12,7 +10,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var applicationVM: ApplicationVM!
     var inputSourceVM: InputSourceVM!
     var feedbackVM: FeedbackVM!
-    var indicatorWindowController: IndicatorWindowController!
+    // var indicatorWindowController: IndicatorWindowController!
     var statusItemController: StatusItemController!
 
     /// `false` until the view models are ready in `applicationDidFinishLaunching`.
@@ -49,19 +47,107 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return elapsed >= 0 && elapsed < window
     }
 
+    private var accessibilityWaitTimer: Timer?
+    private var accessibilityWaitingStatusItem: NSStatusItem?
+    private var suppressPreferencesFromAccessibilityFlow = false
+
     func applicationDidFinishLaunching(_: Notification) {
         feedbackVM = FeedbackVM()
         navigationVM = NavigationVM()
         permissionsVM = PermissionsVM()
         preferencesVM = PreferencesVM(permissionsVM: permissionsVM)
+
+        if PermissionsVM.checkAccessibility(prompt: false) {
+            permissionsVM.isAccessibilityEnabled = true
+            bootstrapAppServices()
+        } else {
+            ISPFileLog.startSession()
+            ISPFileLog.event(
+                "boot",
+                "blocked — Accessibility not granted path=\(Bundle.main.bundleURL.path)",
+                includeSnapshot: false
+            )
+            showAccessibilityRequiredAlert()
+        }
+    }
+
+    @MainActor
+    private func showAccessibilityRequiredAlert() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Accessibility Required Title".i18n()
+        alert.informativeText =
+            "Input Source Pro needs Accessibility to switch and remember keyboard layouts. Without this permission the app will not start.\n\nOpen System Settings → Privacy & Security → Accessibility, enable Input Source Pro, then return — or Quit."
+        alert.addButton(withTitle: "Open Accessibility Settings".i18n())
+        alert.addButton(withTitle: "Quit".i18n())
+
+        NSApp.activate(ignoringOtherApps: true)
+        alert.window.level = .floating
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            suppressPreferencesFromAccessibilityFlow = true
+            NSWorkspace.shared.openAccessibilityPreferences()
+            showAccessibilityWaitingStatusItem()
+            waitForAccessibilityThenBootstrap()
+        } else {
+            NSApp.terminate(nil)
+        }
+    }
+
+    @MainActor
+    private func showAccessibilityWaitingStatusItem() {
+        guard accessibilityWaitingStatusItem == nil else { return }
+
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(named: "MenuBarIcon")
+        item.button?.image?.size = NSSize(width: 16, height: 16)
+        item.button?.image?.isTemplate = true
+
+        let menu = NSMenu()
+        menu.addItem(
+            NSMenuItem(
+                title: "Open Accessibility Settings".i18n(),
+                target: self,
+                action: #selector(reopenAccessibilitySettings),
+                keyEquivalent: ""
+            )
+        )
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(
+            NSMenuItem(
+                title: "Quit".i18n(),
+                action: #selector(NSApplication.shared.terminate(_:)),
+                keyEquivalent: "q"
+            )
+        )
+        item.menu = menu
+        accessibilityWaitingStatusItem = item
+    }
+
+    @MainActor
+    private func removeAccessibilityWaitingStatusItem() {
+        guard let item = accessibilityWaitingStatusItem else { return }
+        NSStatusBar.system.removeStatusItem(item)
+        accessibilityWaitingStatusItem = nil
+    }
+
+    @objc private func reopenAccessibilitySettings() {
+        NSWorkspace.shared.openAccessibilityPreferences()
+    }
+
+    @MainActor
+    private func bootstrapAppServices() {
+        guard applicationVM == nil else { return }
+
+        accessibilityWaitTimer?.invalidate()
+        accessibilityWaitTimer = nil
+        removeAccessibilityWaitingStatusItem()
+
         applicationVM = ApplicationVM(preferencesVM: preferencesVM)
         inputSourceVM = InputSourceVM(preferencesVM: preferencesVM)
-        indicatorVM = IndicatorVM(permissionsVM: permissionsVM, preferencesVM: preferencesVM, applicationVM: applicationVM, inputSourceVM: inputSourceVM)
-
-        indicatorWindowController = IndicatorWindowController(
+        indicatorVM = IndicatorVM(
             permissionsVM: permissionsVM,
             preferencesVM: preferencesVM,
-            indicatorVM: indicatorVM,
             applicationVM: applicationVM,
             inputSourceVM: inputSourceVM
         )
@@ -75,11 +161,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             feedbackVM: feedbackVM,
             inputSourceVM: inputSourceVM
         )
-        
+
         LaunchAtLogin.migrateIfNeeded()
         ISPFileLog.startSession()
         preferencesVM.logStartupSettings()
-        openPreferencesAtFirstLaunch()
+        if !suppressPreferencesFromAccessibilityFlow {
+            openPreferencesAtFirstLaunch()
+        }
         sendLaunchPing()
         updateInstallVersionInfo()
 
@@ -87,9 +175,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let queuedURLs = pendingURLs
         pendingURLs.removeAll()
         queuedURLs.forEach(handleIncomingURL)
+
+        clearAccessibilityPreferencesSuppressionSoon()
+    }
+
+    @MainActor
+    private func waitForAccessibilityThenBootstrap() {
+        accessibilityWaitTimer?.invalidate()
+        accessibilityWaitTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.applicationVM == nil else { return }
+                guard PermissionsVM.checkAccessibility(prompt: false) else { return }
+                self.permissionsVM.isAccessibilityEnabled = true
+                ISPFileLog.event("boot", "Accessibility granted — starting", includeSnapshot: false)
+                self.bootstrapAppServices()
+                self.suppressPreferencesFromAccessibilityFlow = false
+                self.statusItemController.openPreferences()
+            }
+        }
+        RunLoop.main.add(accessibilityWaitTimer!, forMode: .common)
+    }
+
+    private func clearAccessibilityPreferencesSuppressionSoon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.suppressPreferencesFromAccessibilityFlow = false
+        }
     }
 
     func applicationDidBecomeActive(_: Notification) {
+        guard statusItemController != nil else { return }
+        guard !suppressPreferencesFromAccessibilityFlow else { return }
         guard !InputSourceSwitcher.isHandlingTemporaryInputWindowActivation else { return }
 
         // `open <url>` activates the app a beat *before* it delivers the URL

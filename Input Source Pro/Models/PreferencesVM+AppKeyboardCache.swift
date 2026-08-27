@@ -66,13 +66,11 @@ extension PreferencesVM {
             return
         }
 
-        let defaultKeyboard = getAppDefaultKeyboard(appKind)
-
         if appNeedCacheKeyboard(appKind) {
             appKeyboardCache.save(appKind, keyboard: keyboard)
             ISPFileLog.event(
                 "cache-save",
-                "\(appKind.getApp().bundleIdentifier ?? "?") → \(keyboard.persistentIdentifier)",
+                "\(appKind.getId() ?? appKind.getApp().bundleIdentifier ?? "?") → \(keyboard.persistentIdentifier)",
                 includeSnapshot: false
             )
         }
@@ -105,7 +103,7 @@ extension PreferencesVM {
         appKeyboardCache.save(appKind, keyboard: keyboard)
         ISPFileLog.event(
             "cache-leave",
-            "\(appKind.getApp().bundleIdentifier ?? "?") → \(keyboard.persistentIdentifier)",
+            "\(appKind.getId() ?? appKind.getApp().bundleIdentifier ?? "?") → \(keyboard.persistentIdentifier)",
             includeSnapshot: false
         )
     }
@@ -136,7 +134,7 @@ extension PreferencesVM {
         }()
 
         let migrateFlag = UserDefaults.standard.bool(forKey: "ISPEnableRestorePreviouslyUsed.v1")
-        let axTrusted = AXIsProcessTrusted()
+        let axTrusted = PermissionsVM.checkAccessibility(prompt: false)
 
         let appRules = (try? container.viewContext.fetch(AppRule.fetchRequest())) ?? []
         let forcedRules = appRules.compactMap { rule -> String? in
@@ -162,6 +160,11 @@ extension PreferencesVM {
         ISPFileLog.event(
             "settings",
             "cacheEntries=\(appKeyboardCache.entryCount) appRules=\(appRules.count) forced=[\(forcedRules.joined(separator: ", "))] overrides=[\(restoreOverrides.joined(separator: ", "))]",
+            includeSnapshot: false
+        )
+        ISPFileLog.event(
+            "settings",
+            "perWindowMemory=cg+poll axTrusted=\(axTrusted) (CGWindowList; AX optional)",
             includeSnapshot: false
         )
     }

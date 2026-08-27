@@ -48,7 +48,7 @@ enum ISPFileLog {
         let front = NSWorkspace.shared.frontmostApplication
         let layout = InputSource.getCurrentInputSource()
         let launchpad = LaunchpadOverlayDetector.isLaunchpadVisible()
-        let ws = "\(front?.localizedName ?? "?")[\(front?.bundleIdentifier ?? "nil")] pol=\(front?.activationPolicy.rawValue ?? -1)"
+        let ws = "\(front?.localizedName ?? "?")[\(front?.bundleIdentifier ?? "nil")#\(front?.processIdentifier ?? 0)] pol=\(front?.activationPolicy.rawValue ?? -1)"
         let lay = "\(layout.name)[\(layout.persistentIdentifier)]"
         return "ws=\(ws) launchpad=\(launchpad) layout=\(lay)"
     }
