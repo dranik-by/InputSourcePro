@@ -182,18 +182,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func waitForAccessibilityThenBootstrap() {
         accessibilityWaitTimer?.invalidate()
-        accessibilityWaitTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.applicationVM == nil else { return }
-                guard PermissionsVM.checkAccessibility(prompt: false) else { return }
-                self.permissionsVM.isAccessibilityEnabled = true
-                ISPFileLog.event("boot", "Accessibility granted — starting", includeSnapshot: false)
-                self.bootstrapAppServices()
-                self.suppressPreferencesFromAccessibilityFlow = false
-                self.statusItemController.openPreferences()
-            }
+        // Target/selector avoids capturing non-Sendable `self` in a @Sendable Timer closure.
+        let timer = Timer(
+            timeInterval: 0.5,
+            target: self,
+            selector: #selector(accessibilityWaitTick),
+            userInfo: nil,
+            repeats: true
+        )
+        accessibilityWaitTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    @MainActor
+    @objc private func accessibilityWaitTick() {
+        guard applicationVM == nil else {
+            accessibilityWaitTimer?.invalidate()
+            accessibilityWaitTimer = nil
+            return
         }
-        RunLoop.main.add(accessibilityWaitTimer!, forMode: .common)
+        guard PermissionsVM.checkAccessibility(prompt: false) else { return }
+        accessibilityWaitTimer?.invalidate()
+        accessibilityWaitTimer = nil
+        permissionsVM.isAccessibilityEnabled = true
+        ISPFileLog.event("boot", "Accessibility granted — starting", includeSnapshot: false)
+        bootstrapAppServices()
+        suppressPreferencesFromAccessibilityFlow = false
+        statusItemController.openPreferences()
     }
 
     private func clearAccessibilityPreferencesSuppressionSoon() {
