@@ -67,6 +67,8 @@
 "tryToDisplayIndicatorNearCursor" = "Display Near the Input Cursor if Available";
 "isEnableAlwaysOnIndicator" = "Display Always-On Indicator Near the Input Cursor";
 "alwaysOnIndicatorTips" = "This feature requires \"Display Near the Input Cursor if Available\" to be enabled.";
+"isAlwaysDisplayIndicatorNearMouse" = "Always Display Indicator Near the Mouse Cursor";
+"alwaysDisplayIndicatorNearMouseTips" = "The indicator stays visible and follows the mouse cursor. While this is on, the options under \"Advanced\" are not applied.";
 "Customize Styles" = "Customize Styles";
 
 "Show" = "Show";

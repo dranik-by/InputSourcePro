@@ -67,6 +67,8 @@
 "tryToDisplayIndicatorNearCursor" = "利用可能な場合、入力カーソルの近くに表示";
 "isEnableAlwaysOnIndicator" = "入力カーソルの近くに常時表示インジケーターを表示";
 "alwaysOnIndicatorTips" = "この機能は、「利用可能な場合、入力カーソルの近くに表示」が有効になっている必要があります。";
+"isAlwaysDisplayIndicatorNearMouse" = "マウスカーソルの近くに常にインジケーターを表示";
+"alwaysDisplayIndicatorNearMouseTips" = "インジケーターは非表示にならず、マウスカーソルに追従します。この機能が有効な間は「詳細設定」のオプションは適用されません。";
 "Customize Styles" = "スタイルのカスタマイズ";
 
 "Show" = "表示";

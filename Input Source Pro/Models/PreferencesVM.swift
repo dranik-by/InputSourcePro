@@ -327,6 +327,7 @@ struct Preferences {
 
         static let tryToDisplayIndicatorNearCursor = "tryToDisplayIndicatorNearCursor"
         static let isEnableAlwaysOnIndicator = "isEnableAlwaysOnIndicator"
+        static let isAlwaysDisplayIndicatorNearMouse = "isAlwaysDisplayIndicatorNearMouse"
 
         static let indicatorPosition = "indicatorPosition"
         static let indicatorPositionAlignment = "indicatorPositionAlignment"
@@ -529,6 +530,9 @@ struct Preferences {
     @UserDefault(Preferences.Key.isEnableAlwaysOnIndicator)
     var isEnableAlwaysOnIndicator = false
 
+    @UserDefault(Preferences.Key.isAlwaysDisplayIndicatorNearMouse)
+    var isAlwaysDisplayIndicatorNearMouse = false
+
     @CodableUserDefault(Preferences.Key.indicatorPosition)
     var indicatorPosition = IndicatorPosition.nearMouse
 
@@ -550,6 +554,12 @@ extension Preferences {
 
     var isActiveWhenFocusedElementChangesEnabled: Bool {
         return isEnhancedModeEnabled && isActiveWhenFocusedElementChanges
+    }
+
+    /// The option is a sub-setting of "Follow Mouse", so it only takes effect
+    /// while that position mode is selected.
+    var isAlwaysDisplayIndicatorNearMouseEnabled: Bool {
+        return isAlwaysDisplayIndicatorNearMouse && (indicatorPosition ?? .nearMouse) == .nearMouse
     }
 
     var indicatorKind: IndicatorKind {

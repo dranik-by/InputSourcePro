@@ -254,3 +254,130 @@ extension IndicatorWindowController {
             .eraseToAnyPublisher()
     }
 }
+
+// MARK: - Always near mouse
+
+extension IndicatorWindowController {
+    private static let mouseMoveEvents: NSEvent.EventTypeMask = [
+        .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+    ]
+
+    /// While "always display near mouse" is on, this pipeline owns the indicator:
+    /// it keeps it visible, moves it with the pointer, and refreshes its content
+    /// itself. The activate-event pipeline is idle in that mode.
+    func watchAlwaysNearMouse() {
+        preferencesVM.$preferences
+            .map(\.isAlwaysDisplayIndicatorNearMouseEnabled)
+            .removeDuplicates()
+            .flatMapLatest { [weak self] isEnabled -> AnyPublisher<Void, Never> in
+                guard let self = self, isEnabled else { return Empty().eraseToAnyPublisher() }
+
+                return self.alwaysNearMousePublisher()
+            }
+            .sink { _ in }
+            .store(in: cancelBag)
+    }
+
+    private func alwaysNearMousePublisher() -> AnyPublisher<Void, Never> {
+        let isHiddenForApp = applicationVM.$appKind
+            .map { [weak self] appKind -> Bool in
+                guard let self = self, let appKind = appKind else { return false }
+
+                return self.preferencesVM.isHideIndicator(appKind)
+            }
+            .removeDuplicates()
+
+        // The function-key badge shows for a second after a toggle, the same as
+        // the transient indicator does.
+        let badge: AnyPublisher<FKeyMode?, Never> = indicatorVM.functionKeyModeChangeSubject
+            .flatMapLatest { mode -> AnyPublisher<FKeyMode?, Never> in
+                Timer.delay(seconds: 1)
+                    .map { _ -> FKeyMode? in nil }
+                    .prepend(.some(mode))
+                    .eraseToAnyPublisher()
+            }
+            .prepend(nil)
+            .eraseToAnyPublisher()
+
+        // Re-render when the indicator's look changes in Settings (style, size,
+        // colours, per-keyboard customisation). A @Published value is delivered
+        // before its property is updated, so hop to the main queue first.
+        let styleChanged = Publishers.Merge(
+            preferencesVM.$preferences.mapToVoid().eraseToAnyPublisher(),
+            preferencesVM.$keyboardConfigs.mapToVoid().eraseToAnyPublisher()
+        )
+        .receive(on: DispatchQueue.main)
+
+        // Take the input source from the emitted state for the same reason:
+        // reading indicatorVM.state here would lag one change behind.
+        let content = Publishers.CombineLatest3(indicatorVM.$state.map(\.inputSource), badge, styleChanged)
+
+        // The global monitor never sees events delivered to this app, so also
+        // watch locally to keep following over our own windows.
+        let mouseMoved = Publishers.Merge(
+            NSEvent.watch(matching: Self.mouseMoveEvents),
+            NSEvent.watchLocal(matching: Self.mouseMoveEvents)
+        )
+        .throttle(for: .milliseconds(16), scheduler: DispatchQueue.main, latest: true)
+        .mapToVoid()
+        .eraseToAnyPublisher()
+
+        // The panel joins the active Space only when ordered front, so re-order it
+        // after a Space switch to bring it along.
+        let spaceChanged = NSWorkspace.shared.notificationCenter
+            .publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .tap { [weak self] _ in
+                guard let self = self, self.isActive else { return }
+
+                self.deactive()
+                self.active()
+            }
+            .mapToVoid()
+            .eraseToAnyPublisher()
+
+        return isHiddenForApp
+            .flatMapLatest { [weak self] isHidden -> AnyPublisher<Void, Never> in
+                guard let self = self, !isHidden else {
+                    self?.isActive = false
+                    return Empty().eraseToAnyPublisher()
+                }
+
+                let contentShown = content
+                    .tap { self.showNearMouseContent(inputSource: $0.0, badge: $0.1) }
+                    .mapToVoid()
+                    .eraseToAnyPublisher()
+
+                return Publishers.MergeMany([contentShown, mouseMoved, spaceChanged])
+                    .tap { self.moveNearMouse() }
+                    .eraseToAnyPublisher()
+            }
+            .handleEvents(receiveCancel: { [weak self] in self?.isActive = false })
+            .eraseToAnyPublisher()
+    }
+
+    private func showNearMouseContent(inputSource: InputSource, badge mode: FKeyMode?) {
+        let event: IndicatorVM.ActivateEvent = mode.map { .functionKeyModeChanges($0) }
+            ?? .inputSourceChanges(inputSource, .noChanges)
+
+        updateIndicator(event: event, inputSource: inputSource)
+    }
+
+    private func moveNearMouse() {
+        guard let size = getAppSize(),
+              let screen = NSScreen.getScreenWithMouse()
+        else { return }
+
+        let point = IndicatorPosition.pointNearMouse(
+            mouseLocation: NSEvent.mouseLocation,
+            size: size,
+            visibleFrame: screen.visibleFrame
+        )
+
+        moveIndicator(position: (.nearMouse, point))
+
+        if !isActive {
+            isActive = true
+        }
+    }
+}

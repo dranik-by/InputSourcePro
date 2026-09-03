@@ -145,6 +145,7 @@ struct SettingsBackupPreferences: Codable {
     var indicatorForgeground: IndicatorColor?
     var tryToDisplayIndicatorNearCursor: Bool?
     var isEnableAlwaysOnIndicator: Bool?
+    var isAlwaysDisplayIndicatorNearMouse: Bool?
     var indicatorPosition: IndicatorPosition?
     var indicatorPositionAlignment: IndicatorPosition.Alignment?
     var indicatorPositionSpacing: IndicatorPosition.Spacing?
@@ -203,6 +204,7 @@ struct SettingsBackupPreferences: Codable {
         indicatorForgeground = preferences.indicatorForgeground
         tryToDisplayIndicatorNearCursor = preferences.tryToDisplayIndicatorNearCursor
         isEnableAlwaysOnIndicator = preferences.isEnableAlwaysOnIndicator
+        isAlwaysDisplayIndicatorNearMouse = preferences.isAlwaysDisplayIndicatorNearMouse
         indicatorPosition = preferences.indicatorPosition
         indicatorPositionAlignment = preferences.indicatorPositionAlignment
         indicatorPositionSpacing = preferences.indicatorPositionSpacing
@@ -292,6 +294,9 @@ struct SettingsBackupPreferences: Codable {
             preferences.tryToDisplayIndicatorNearCursor = tryToDisplayIndicatorNearCursor
         }
         if let isEnableAlwaysOnIndicator { preferences.isEnableAlwaysOnIndicator = isEnableAlwaysOnIndicator }
+        if let isAlwaysDisplayIndicatorNearMouse {
+            preferences.isAlwaysDisplayIndicatorNearMouse = isAlwaysDisplayIndicatorNearMouse
+        }
         if let indicatorPosition { preferences.indicatorPosition = indicatorPosition }
         if let indicatorPositionAlignment { preferences.indicatorPositionAlignment = indicatorPositionAlignment }
         if let indicatorPositionSpacing { preferences.indicatorPositionSpacing = indicatorPositionSpacing }

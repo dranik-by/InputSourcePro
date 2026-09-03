@@ -139,30 +139,11 @@ private extension PreferencesVM {
         AnyPublisher.create { observer in
             guard let screen = NSScreen.getScreenWithMouse() else { return AnyCancellable {} }
 
-            let offset: CGFloat = 12
-            let padding: CGFloat = 5
-            let visibleFrame = screen.visibleFrame
-            let maxXPoint = visibleFrame.maxX
-            let minXPoint = visibleFrame.minX
-            let maxYPoint = visibleFrame.maxY
-            let minYPoint = visibleFrame.minY
-
-            var mousePoint = CGPoint(x: NSEvent.mouseLocation.x, y: NSEvent.mouseLocation.y)
-
-            // default offset
-            mousePoint.x += offset
-            mousePoint.y -= offset
-
-            // move app to cursor's right/bottom edge
-            mousePoint.y -= size.height
-
-            // avoid overflow
-            mousePoint.x = min(maxXPoint - size.width - padding, mousePoint.x)
-            mousePoint.x = max(minXPoint + padding, mousePoint.x)
-            mousePoint.y = min(maxYPoint - size.height - padding, mousePoint.y)
-            mousePoint.y = max(minYPoint + padding, mousePoint.y)
-
-            observer.send(mousePoint)
+            observer.send(IndicatorPosition.pointNearMouse(
+                mouseLocation: NSEvent.mouseLocation,
+                size: size,
+                visibleFrame: screen.visibleFrame
+            ))
             observer.send(completion: .finished)
 
             return AnyCancellable {}

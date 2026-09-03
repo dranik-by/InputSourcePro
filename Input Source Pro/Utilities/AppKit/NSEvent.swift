@@ -10,7 +10,11 @@ extension NSEvent {
                     handler: { observer.send($0) }
                 )
 
-                return AnyCancellable { NSEvent.removeMonitor(monitor!) }
+                return AnyCancellable {
+                    if let monitor = monitor {
+                        NSEvent.removeMonitor(monitor)
+                    }
+                }
             }
     }
 

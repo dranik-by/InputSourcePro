@@ -55,6 +55,32 @@ extension IndicatorPosition {
     }
 }
 
+extension IndicatorPosition {
+    /// Origin for an indicator of `size` placed just below and to the right of
+    /// the mouse pointer, clamped so the whole indicator stays inside `visibleFrame`.
+    static func pointNearMouse(mouseLocation: CGPoint, size: CGSize, visibleFrame: CGRect) -> CGPoint {
+        let offset: CGFloat = 12
+        let padding: CGFloat = 5
+
+        var point = mouseLocation
+
+        // default offset
+        point.x += offset
+        point.y -= offset
+
+        // move app to cursor's right/bottom edge
+        point.y -= size.height
+
+        // avoid overflow
+        point.x = min(visibleFrame.maxX - size.width - padding, point.x)
+        point.x = max(visibleFrame.minX + padding, point.x)
+        point.y = min(visibleFrame.maxY - size.height - padding, point.y)
+        point.y = max(visibleFrame.minY + padding, point.y)
+
+        return point
+    }
+}
+
 extension IndicatorPosition.Alignment {
     var name: String {
         switch self {

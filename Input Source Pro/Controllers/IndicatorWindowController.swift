@@ -83,10 +83,20 @@ class IndicatorWindowController: FloatWindowController {
             }
             .eraseToAnyPublisher()
 
-        indicatorVM.screenIsLockedPublisher
-            .flatMapLatest { isLocked in isLocked ? Empty().eraseToAnyPublisher() : indicatorPublisher }
+        // While the indicator is pinned to the mouse (see watchAlwaysNearMouse),
+        // that pipeline owns visibility and position, so this one stays idle.
+        let isAlwaysNearMouse = preferencesVM.$preferences
+            .map(\.isAlwaysDisplayIndicatorNearMouseEnabled)
+            .removeDuplicates()
+
+        Publishers.CombineLatest(indicatorVM.screenIsLockedPublisher, isAlwaysNearMouse)
+            .map { isLocked, isAlwaysNearMouse in isLocked || isAlwaysNearMouse }
+            .removeDuplicates()
+            .flatMapLatest { isIdle in isIdle ? Empty().eraseToAnyPublisher() : indicatorPublisher }
             .sink { _ in }
             .store(in: cancelBag)
+
+        watchAlwaysNearMouse()
     }
 
     @available(*, unavailable)
