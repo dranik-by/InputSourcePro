@@ -6,8 +6,6 @@
 	<true/>
 	<key>com.apple.security.app-sandbox</key>
 	<false/>
-	<key>com.apple.security.cs.disable-library-validation</key>
-	<true/>
 	<key>com.apple.security.device.input-monitoring</key>
 	<true/>
 </dict>

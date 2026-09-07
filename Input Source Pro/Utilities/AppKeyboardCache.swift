@@ -30,22 +30,53 @@ class AppKeyboardCache {
         persist()
     }
 
-    func save(_ kind: AppKind, keyboard: InputSource?) {
+    func save(
+        _ kind: AppKind,
+        keyboard: InputSource?,
+        liveProcessIdentifiers: Set<pid_t>? = nil
+    ) {
         guard let id = kind.getId() else { return }
 
         if let keyboardId = keyboard?.persistentIdentifier {
-            guard cache[id] != keyboardId else {
-                logger.debug { "Save skip unchanged \(id)#\(keyboardId)" }
-                return
+            var changed = false
+
+            if cache[id] != keyboardId {
+                logger.debug { "Save \(id)#\(keyboardId)" }
+                ISPFileLog.event(
+                    "cache-write",
+                    "key=\(id) → \(keyboardId) app=\(kind.getApp().bundleIdentifier ?? "?")#\(kind.getApp().processIdentifier)",
+                    includeSnapshot: false
+                )
+                cache[id] = keyboardId
+                changed = true
             }
-            logger.debug { "Save \(id)#\(keyboardId)" }
-            ISPFileLog.event(
-                "cache-write",
-                "key=\(id) → \(keyboardId) app=\(kind.getApp().bundleIdentifier ?? "?")#\(kind.getApp().processIdentifier)",
-                includeSnapshot: false
-            )
-            cache[id] = keyboardId
-            persist()
+
+            if let processId = kind.processInstanceCacheId(),
+               processId != id,
+               cache[processId] != keyboardId
+            {
+                cache[processId] = keyboardId
+                changed = true
+            }
+
+            if let bundleId = Self.bundleCacheId(for: kind),
+               cache[bundleId] != keyboardId
+            {
+                cache[bundleId] = keyboardId
+                changed = true
+            }
+
+            let livePids = liveProcessIdentifiers ?? Self.runningProcessIdentifiers()
+            let pruned: Bool = {
+                guard let bundleId = Self.bundleCacheId(for: kind) else { return false }
+                return pruneDeadInstanceKeys(bundleId: bundleId, liveProcessIdentifiers: livePids)
+            }()
+
+            if changed || pruned {
+                persist()
+            } else {
+                logger.debug { "Save skip unchanged \(id)#\(keyboardId)" }
+            }
         } else if cache[id] != nil {
             cache.removeValue(forKey: id)
             ISPFileLog.event("cache-write", "key=\(id) cleared", includeSnapshot: false)
@@ -120,5 +151,38 @@ class AppKeyboardCache {
 
     private func persist() {
         defaults.set(cache, forKey: Self.storageKey)
+    }
+
+    private static func bundleCacheId(for kind: AppKind) -> String? {
+        guard kind.processInstanceCacheId() != nil else { return nil }
+        let bundleId = kind.getApp().bundleId() ?? kind.getApp().bundleIdentifier
+        guard let bundleId, !bundleId.isEmpty else { return nil }
+        return bundleId
+    }
+
+    private static func runningProcessIdentifiers() -> Set<pid_t> {
+        Set(NSWorkspace.shared.runningApplications.map(\.processIdentifier))
+    }
+
+    @discardableResult
+    private func pruneDeadInstanceKeys(
+        bundleId: String,
+        liveProcessIdentifiers: Set<pid_t>
+    ) -> Bool {
+        let prefix = "\(bundleId)#"
+        let stale = cache.keys.filter { key in
+            guard key.hasPrefix(prefix) else { return false }
+            let rest = key.dropFirst(prefix.count)
+            let pidPart = rest.split(separator: "#", maxSplits: 1).first.map(String.init) ?? ""
+            guard let pid = pid_t(pidPart) else { return false }
+            return !liveProcessIdentifiers.contains(pid)
+        }
+        guard !stale.isEmpty else { return false }
+
+        for key in stale {
+            logger.debug { "Prune unreachable \(key)" }
+            cache.removeValue(forKey: key)
+        }
+        return true
     }
 }

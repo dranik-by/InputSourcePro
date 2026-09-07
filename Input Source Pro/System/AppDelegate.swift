@@ -10,7 +10,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var applicationVM: ApplicationVM!
     var inputSourceVM: InputSourceVM!
     var feedbackVM: FeedbackVM!
-    // var indicatorWindowController: IndicatorWindowController!
+    var indicatorWindowController: IndicatorWindowController!
     var statusItemController: StatusItemController!
 
     /// `false` until the view models are ready in `applicationDidFinishLaunching`.
@@ -148,6 +148,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         indicatorVM = IndicatorVM(
             permissionsVM: permissionsVM,
             preferencesVM: preferencesVM,
+            applicationVM: applicationVM,
+            inputSourceVM: inputSourceVM
+        )
+
+        indicatorWindowController = IndicatorWindowController(
+            permissionsVM: permissionsVM,
+            preferencesVM: preferencesVM,
+            indicatorVM: indicatorVM,
             applicationVM: applicationVM,
             inputSourceVM: inputSourceVM
         )
