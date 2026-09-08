@@ -322,6 +322,15 @@ extension IndicatorWindowController {
         .mapToVoid()
         .eraseToAnyPublisher()
 
+        // Local event monitors miss AppKit's menu, control and window-dragging
+        // loops. Sample directly in that mode; the main dispatch queue can stall.
+        let mouseMovedDuringTracking = Timer.publish(every: 1.0 / 60, on: .main, in: .eventTracking)
+            .autoconnect()
+            .map { _ in NSEvent.mouseLocation }
+            .removeDuplicates()
+            .mapToVoid()
+            .eraseToAnyPublisher()
+
         // The panel joins the active Space only when ordered front, so re-order it
         // after a Space switch to bring it along.
         let spaceChanged = NSWorkspace.shared.notificationCenter
@@ -348,7 +357,7 @@ extension IndicatorWindowController {
                     .mapToVoid()
                     .eraseToAnyPublisher()
 
-                return Publishers.MergeMany([contentShown, mouseMoved, spaceChanged])
+                return Publishers.MergeMany([contentShown, mouseMoved, mouseMovedDuringTracking, spaceChanged])
                     .tap { self.moveNearMouse() }
                     .eraseToAnyPublisher()
             }

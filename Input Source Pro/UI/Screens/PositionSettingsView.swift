@@ -71,7 +71,7 @@ struct PositionSettingsView: View {
 
                         if preferencesVM.preferences.indicatorPosition == .nearMouse {
                             HStack {
-                                Toggle("", isOn: alwaysNearMouseBinding)
+                                Toggle("isAlwaysDisplayIndicatorNearMouse".i18n(), isOn: alwaysNearMouseBinding)
                                     .toggleStyle(.switch)
                                     .labelsHidden()
 
